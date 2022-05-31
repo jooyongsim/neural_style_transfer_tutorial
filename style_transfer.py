@@ -12,8 +12,6 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from torchvision import models
 
-models.vgg19(pretrained=True).features
-
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -21,7 +19,7 @@ img_size = 512
 transform = transforms.Compose([
             transforms.Resize((img_size,img_size)),
             transforms.ToTensor(),
-])
+            ])
             # transforms.Normalize(mean=(0.485, 0.456, 0.406), 
             #                         std=(0.229, 0.224, 0.225))
             #                         ])
@@ -31,17 +29,13 @@ def load_image(img_path):
     return img.to(device)
 
 # denorm = transforms.Normalize((-2.12, -2.04, -1.80), (4.37, 4.46, 4.44))
-
 def restore(img):
     # img = denorm(img) #.clamp_(0,1)
     img = img.squeeze().cpu().detach().numpy().transpose((1,2,0))
     return img
     
-import matplotlib.pyplot as plt
 style = load_image('picasso.jpg')
 content = load_image('dancing.jpg')
-
-device = torch.device('cuda')
 
 class VGGFeatures(nn.Module):
     def __init__(self):
@@ -57,18 +51,20 @@ class VGGFeatures(nn.Module):
         return features
 
 vggf = VGGFeatures().to(device).eval()
-con_features = vggf(content)
+vggf.requires_grad_(False)
 
+con_features = vggf(content)
 for con_feature in con_features:
     print(con_feature.shape)
 
-generated = content.clone().requires_grad_(True)
+generated = content.clone().requires_grad_(True)    
 
-    
 optimizer = torch.optim.Adam([generated],lr = 0.005)
-vggf.requires_grad_(False)
 
-for step in range(1000):
+style_weight = 1e6
+total_steps = 1000
+
+for step in range(total_steps):
     gen_features = vggf(generated)
     con_features = vggf(content)
     sty_features = vggf(style)
@@ -85,13 +81,14 @@ for step in range(1000):
         G_sty = sty_feature.reshape(c,h*w).mm(sty_feature.reshape(c,h*w).t())
         style_loss += torch.mean((G_gen-G_sty)**2/(c*h*w))
 
-    loss = content_loss + style_loss * 1e6
+    loss = content_loss + style_loss * style_weight
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
 
     if step%10 == 0:
-        print(f'Step: {step}, C loss: {content_loss}, S loss: {style_loss}')
+        print(f'Step: {step}, Content loss: {content_loss}, Style loss: {style_loss}')
+        
     if step%50 == 0:
         img = generated.clone().squeeze()
         plt.figure(figsize=[15,5])
